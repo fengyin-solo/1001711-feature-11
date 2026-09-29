@@ -184,6 +184,7 @@ class RectifyEntry(BaseModel):
     field_5: str | None = None  # 完成日期
     field_6: str | None = None  # 验收人员
     field_7: str | None = None  # 整改状态
+    field_8: str | None = None  # 历史点检单号
 
 class RegisterEntry(BaseModel):
     """登记记录明细结构。"""

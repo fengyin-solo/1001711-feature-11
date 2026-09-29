@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/rectify", tags=["整改闭环"])
 
 service = RectifyService()
 
-LIST_FIELDS = ["整改单号", "关联隐患", "整改措施", "责任单位", "整改期限", "完成日期", "验收人员", "整改状态"]
+LIST_FIELDS = ["整改单号", "关联隐患", "历史点检单号", "整改措施", "责任单位", "整改期限", "完成日期", "验收人员", "整改状态"]
 STATUSES = ["待下发", "整改中", "待验收", "已闭环"]
 
 

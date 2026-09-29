@@ -36,17 +36,23 @@
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
-          <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-for="column in columns" :key="column">{{ displayValue(row, column) }}</td>
           <td class="row-actions">
-            <button
-              v-for="action in actions"
-              :key="action"
-              class="link"
-              type="button"
-              @click="runAction(action, row)"
-            >
-              {{ action }}
-            </button>
+            <template v-if="isPlanVoid(row)">
+              <span class="muted-text">仅查看</span>
+            </template>
+            <template v-else>
+              <button
+                v-for="action in availableActions(row)"
+                :key="action"
+                class="link"
+                type="button"
+                @click="runAction(action, row)"
+              >
+                {{ action }}
+              </button>
+              <span v-if="!availableActions(row).length" class="muted-text">已提交，不可重复操作</span>
+            </template>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -67,19 +73,38 @@ import { onMounted, ref } from 'vue'
 
 import { request } from '@/api/client'
 
-type Row = Record<string, string | number | null>
+type Row = Record<string, string | number | boolean | null>
 
 const ENDPOINT = '/api/spotcheck'
 const columns = ["点检单号", "关联计划", "点检设备", "点检人员", "点检日期", "点检结论", "异常项数", "点检状态"]
-const actions = ["开始点检", "提交结果", "退回重检"]
-const statuses = ["待点检", "点检中", "已提交", "已退回"]
+const actionByStatus: Record<string, string[]> = {
+  '待点检': ['开始点检'],
+  '点检中': ['提交结果', '退回重检'],
+  '已提交': [],
+  '已退回': [],
+}
 const stats = [{"label": "待点检设备", "value": 0}, {"label": "本月点检单数", "value": 0}, {"label": "异常项数", "value": 0}]
 
 const rows = ref<Row[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
+const planStatuses = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+
+function displayValue(row: Row, column: string) {
+  if (column === '点检状态') return row.status ?? row[column] ?? '—'
+  const value = row[column]
+  return value === null || value === undefined || value === '' ? '—' : value
+}
+
+function isPlanVoid(row: Row) {
+  return planStatuses.value[String(row['关联计划'] ?? '')] === '已作废'
+}
+
+function availableActions(row: Row) {
+  return actionByStatus[String(row.status ?? '')] ?? []
+}
 
 function resetFilters() {
   filters.value = {}
@@ -96,15 +121,29 @@ function openCreate() {
 
 async function runAction(action: string, row: Row) {
   errorMessage.value = ''
+  const values: Record<string, string> = { action }
+  if (action === '提交结果') {
+    const conclusionInput = window.prompt('请输入点检结论（正常/异常）', '正常')
+    if (conclusionInput === null) return
+    const conclusion = conclusionInput.trim()
+    values['点检结论'] = conclusion
+    if (conclusion === '异常') {
+      const countInput = window.prompt('请输入异常项数', '1')
+      if (countInput === null) return
+      values['异常项数'] = countInput.trim()
+    }
+  }
+
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values }),
     })
-    if (!response.ok) {
-      throw new Error('点检记录动作未生效，请稍后重试')
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(payload?.message ?? payload?.detail ?? '点检记录动作未生效，请稍后重试')
     }
-    await reload()
+    await Promise.all([reload(), loadPlans()])
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '点检记录操作失败'
   }
@@ -126,5 +165,18 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+async function loadPlans() {
+  const response = await request(`/api/plan?page=1&size=200`)
+  if (!response.ok) return
+  const payload = await response.json().catch(() => null)
+  const statusMap: Record<string, string> = {}
+  for (const plan of payload?.items ?? []) {
+    statusMap[String(plan['计划编号'] ?? '')] = String(plan.status ?? '')
+  }
+  planStatuses.value = statusMap
+}
+
+onMounted(() => {
+  void Promise.all([reload(), loadPlans()])
+})
 </script>

@@ -36,10 +36,14 @@
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
-          <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-for="column in columns" :key="column">{{ displayValue(row, column) }}</td>
           <td class="row-actions">
+            <template v-if="String(row.status) === '已作废'">
+              <span class="muted-text">已作废</span>
+            </template>
             <button
-              v-for="action in actions"
+              v-for="action in availableActions(row)"
+              v-else
               :key="action"
               class="link"
               type="button"
@@ -71,7 +75,12 @@ type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/plan'
 const columns = ["计划编号", "点检对象", "点检周期", "点检项目", "计划工期", "编制人员", "审批人员", "计划状态"]
-const actions = ["提交审批", "确认批复", "作废计划"]
+const actionByStatus: Record<string, string[]> = {
+  '待编制': ['提交审批', '作废计划'],
+  '待审批': ['确认批复', '作废计划'],
+  '已批复': ['作废计划'],
+  '已作废': [],
+}
 const statuses = ["待编制", "待审批", "已批复", "已作废"]
 const stats = [{"label": "待审批计划", "value": 0}, {"label": "已批复计划", "value": 0}, {"label": "本月点检项", "value": 0}]
 
@@ -80,6 +89,15 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+
+function displayValue(row: Row, column: string) {
+  if (column === '计划状态') return row.status ?? row[column] ?? '—'
+  return row[column] ?? '—'
+}
+
+function availableActions(row: Row) {
+  return actionByStatus[String(row.status ?? '')] ?? []
+}
 
 function resetFilters() {
   filters.value = {}
@@ -99,10 +117,11 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
-    if (!response.ok) {
-      throw new Error('点检计划动作未生效，请稍后重试')
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(payload?.message ?? payload?.detail ?? '点检计划动作未生效，请稍后重试')
     }
     await reload()
   } catch (error) {

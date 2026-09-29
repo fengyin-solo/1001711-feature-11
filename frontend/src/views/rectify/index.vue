@@ -36,7 +36,7 @@
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
-          <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-for="column in columns" :key="column">{{ displayValue(row, column) }}</td>
           <td class="row-actions">
             <button
               v-for="action in actions"
@@ -70,7 +70,7 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/rectify'
-const columns = ["整改单号", "关联隐患", "整改措施", "责任单位", "整改期限", "完成日期", "验收人员", "整改状态"]
+const columns = ["整改单号", "关联隐患", "历史点检单号", "整改措施", "责任单位", "整改期限", "完成日期", "验收人员", "整改状态"]
 const actions = ["下发整改", "提交验收", "确认闭环"]
 const statuses = ["待下发", "整改中", "待验收", "已闭环"]
 const stats = [{"label": "待下发整改", "value": 0}, {"label": "整改中单据", "value": 0}, {"label": "逾期未闭环", "value": 0}]
@@ -79,7 +79,13 @@ const rows = ref<Row[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
-const filterFields = columns.slice(0, 3)
+const filterFields = ["整改单号", "关联隐患", "整改措施"]
+
+function displayValue(row: Row, column: string) {
+  if (column === '整改状态') return row.status ?? row[column] ?? '—'
+  const value = row[column]
+  return value === null || value === undefined || value === '' ? '—' : value
+}
 
 function resetFilters() {
   filters.value = {}
@@ -99,10 +105,11 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
-    if (!response.ok) {
-      throw new Error('整改闭环动作未生效，请稍后重试')
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(payload?.message ?? payload?.detail ?? '整改闭环动作未生效，请稍后重试')
     }
     await reload()
   } catch (error) {

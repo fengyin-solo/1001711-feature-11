@@ -9,7 +9,13 @@ MODULE = "plan"
 REQUIRED_FIELDS = ["计划编号", "点检对象", "点检周期"]
 STATUS_ORDER = ["待编制", "待审批", "已批复", "已作废"]
 ACTION_RULES = {"提交审批": "待审批", "确认批复": "已批复", "作废计划": "已作废"}
+ACTION_SOURCES = {
+    "提交审批": {"待编制"},
+    "确认批复": {"待审批"},
+    "作废计划": {"待编制", "待审批", "已批复"},
+}
 NEGATIVE_ACTIONS = ["作废计划"]
+VOID_PLAN_STATUS = "已作废"
 
 
 class PlanService:
@@ -55,6 +61,10 @@ class PlanService:
         target = ACTION_RULES[action]
         if target not in STATUS_ORDER:
             return None, f"目标状态「{target}」不在允许的状态序列里"
+        if entry.get("status") == VOID_PLAN_STATUS:
+            return None, "点检计划已作废，只能查看，不能变更状态"
+        if entry.get("status") not in ACTION_SOURCES[action]:
+            return None, f"当前计划状态为「{entry.get('status')}」，不能执行「{action}」"
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
