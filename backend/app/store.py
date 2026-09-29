@@ -37,10 +37,17 @@ class Store:
                 "pending": sum(1 for row in rows if row.get("pending")),
                 "abnormal": sum(1 for row in rows if row.get("abnormal")),
             })
+        # 待整改量：整改闭环台账里尚未闭环（待下发/整改中/待验收）的事项数。
+        rectify_open = sum(
+            1
+            for row in self.rows("rectify")
+            if row.get("status") in ("待下发", "整改中", "待验收")
+        )
         cards = [
             {"label": "业务模块", "value": len(modules)},
             {"label": "今日新增", "value": sum(int(item["created"]) for item in modules)},
             {"label": "待处理", "value": sum(int(item["pending"]) for item in modules)},
+            {"label": "待整改量", "value": rectify_open},
             {"label": "异常量", "value": sum(int(item["abnormal"]) for item in modules)},
         ]
         return {"cards": cards, "modules": modules}

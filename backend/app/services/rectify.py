@@ -56,6 +56,17 @@ class RectifyService:
         if target not in STATUS_ORDER:
             return None, f"目标状态「{target}」不在允许的状态序列里"
         entry["status"] = target
+        entry["整改状态"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
+        if action == "确认闭环":
+            entry["abnormal"] = False
+            # 点检异常来源的整改事项闭环后，台账与运营概览同步回收，
+            # 并回写点检记录的异常项数；全部闭环时点检记录同步收尾。
+            spot_code = str(entry.get("关联点检单") or "").strip()
+            if spot_code:
+                from app.services.spotcheck import SpotcheckService
+
+                SpotcheckService().sync_rectify_closed(spot_code)
+                return entry, f"整改单已{action}，点检单 {spot_code} 的待整改量已回收"
         return entry, f"整改单已{action}"

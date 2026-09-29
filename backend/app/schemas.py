@@ -19,6 +19,7 @@ class ActionResult(BaseModel):
     ok: bool
     message: str
     entry: dict[str, Any] | None = None
+    rectify_items: list[dict[str, Any]] = Field(default_factory=list, description="本次异常上报新生成的待整改事项")
 
 
 class EntryPayload(BaseModel):
